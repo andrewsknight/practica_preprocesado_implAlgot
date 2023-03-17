@@ -28,9 +28,9 @@ import re
 import os
 import csv
 import random
-
+import pandas as pd
 from past.builtins import unicode
-
+import json
 import apache_beam as beam
 from apache_beam.io import ReadFromText #fichero de texto a colección
 from apache_beam.io import WriteToText #colección a fichero de texto
@@ -69,11 +69,29 @@ class CustomCoder(Coder):
 
 class ExtractColumnsDoFn(beam.DoFn):    #Extrae información de las columnas
     def process(self, element):
-        # space removal
-        element_split = list(json.reader(element, delimiter=",")) #convertimos a una lista cada fila de la tabla
-        element_split = [x for x in element_split if x != ["", ""]] #eliminamos espacios en blanco
-        # text, sentiment
-        yield element_split[2][-1], element_split[0][-1] #extraemos la información de la cuarta y la primera columna. Usamos yield en lugar de return porque el return devuelve instantáneamente mientras yield espera a que acaben todas las ejecuciones en paralelo.
+      element = []
+      with open('/content/batch/Dataset for Detection of Cyber-Trolls.json') as f:
+        for l in f:
+          element.append(json.loads(l))
+      
+      filtered_data = [{'content' : item['content'], 'label': item['annotation']['label']} for item in element]
+      
+      for dic in filtered_data:
+        for clave, valor in dic.items():
+         try:
+          dic[clave] = int(valor[0])
+         except:
+          pass
+
+      df= pd.DataFrame(filtered_data)
+      df = df[pd.to_numeric(df['label'], errors= 'coerce').notnull()] #eliminamos las filas en las que sus valores de sentimiento no corresponde a un número.
+      element = df.to_csv
+
+    # space removal
+      element_split = list(csv.reader(element, delimiter=",")) #convertimos a una lista cada fila de la tabla
+      element_split = [x for x in element_split if x != ["", ""]] #eliminamos espacios en blanco
+    # text, sentiment
+      yield element_split[1][-1], element_split[0][-1] #extraemos la información de la cuarta y la primera columna. Usamos yield en lugar de return porque el return devuelve instantáneamente mientras yield espera a que acaben todas las ejecuciones en paralelo.
 
 
 class PreprocessColumnsTrainFn(beam.DoFn): #realizado todo el preprocesamiento propio de NLP
@@ -99,8 +117,8 @@ class PreprocessColumnsTrainFn(beam.DoFn): #realizado todo el preprocesamiento p
         return " ".join(tokens) #devuelve el resultado
 
     def process(self, element):
-        processed_text = self.process_text(element[0]) #procesa texto
-        processed_sentiment = self.process_sentiment(element[1]) #procesa sentimiento
+        processed_text = self.process_text(element[1]) #procesa texto
+        processed_sentiment = self.process_sentiment(element[0]) #procesa sentimiento
         yield f"{processed_text}, {processed_sentiment}"
 
 
